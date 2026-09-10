@@ -1,0 +1,14 @@
+# TabICLv2 pre-training stage 3, to be combined with classification.yaml or regression.yaml and
+# init_from=<stage 2 checkpoint>: 10K steps on 400-60000 rows (log-uniform), 79-81% training rows, lr 2e-5, clip 1.
+data:
+  micro_batch_size: 1
+  min_seq_len: 400
+  max_seq_len: 60000
+  min_train_frac: 0.79
+  max_train_frac: 0.81
+optim:
+  max_steps: 10000
+  accum_steps: 64
+  lr: 2.0e-5
+  grad_clip: 1.0
+save_every: 50

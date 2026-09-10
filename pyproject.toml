@@ -1,0 +1,17 @@
+[project]
+name = "nanotabicl"
+version = "0.1.0"
+description = "Minimal TabICLv2 pre-training: model, prior, on-the-fly CPU data generation and training loop"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = ["torch>=2.3", "numpy", "scikit-learn", "omegaconf"]
+
+[project.optional-dependencies]
+dev = ["pytest", "matplotlib", "wandb"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["nanotabicl"]

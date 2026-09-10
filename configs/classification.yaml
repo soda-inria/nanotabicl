@@ -1,0 +1,49 @@
+# TabICLv2 classifier, pre-training stage 1 (scripts/train_v2_clf_stage1.sh of the TabICL repository).
+# All values equal the dataclass defaults in config.py and are listed for reference.
+# Continue with stage 2 and 3 via e.g.
+#   python -m nanotabicl.train configs/classification.yaml configs/stage2.yaml \
+#       init_from=runs/classification/latest.pt out_dir=runs/classification_stage2
+model:
+  embed_dim: 128
+  col_num_blocks: 3
+  row_num_blocks: 3
+  icl_num_blocks: 12
+  col_nhead: 8
+  row_nhead: 8
+  icl_nhead: 8
+  feature_group_size: 3
+  n_cls_cols: 4
+  n_cls_rows: 128
+  ln_bias: true
+data:
+  task: classification
+  max_classes: 10
+  micro_batch_size: 4
+  min_seq_len: 1024
+  max_seq_len: 1024
+  log_seq_len: true
+  min_train_frac: 0.3
+  max_train_frac: 0.9
+  min_features: 1
+  max_features: 100
+  log_n_features: false
+  max_cat_size: 100
+  filter_unpredictable: true
+  num_workers: -1
+optim:
+  max_steps: 500000
+  accum_steps: 16
+  lr: 8.0e-4
+  weight_decay: 0.01
+  momentum: 0.9
+  matched_adamw_rms: 0.2
+  warmup_frac: 0.01
+  grad_clip: 10.0
+  amp_dtype: float32
+seed: 0
+device: auto
+out_dir: runs/classification
+init_from: null
+save_every: 500
+log_every: 10
+wandb_project: null

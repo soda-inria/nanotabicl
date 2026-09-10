@@ -1,0 +1,9 @@
+# TabICLv2 regressor, pre-training stage 1 (scripts/train_v2_reg_stage1.sh of the TabICL repository):
+# 999 quantiles of the standardized target with a pinball loss, LayerNorm without bias. Everything else as in
+# classification.yaml / the defaults in config.py.
+model:
+  ln_bias: false
+data:
+  task: regression
+  n_quantiles: 999
+out_dir: runs/regression

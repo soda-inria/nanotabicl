@@ -1,0 +1,25 @@
+# Small model and small datasets for development on a CPU. Batch size = accum_steps * micro_batch_size = 16.
+model:
+  embed_dim: 64
+  col_num_blocks: 1
+  row_num_blocks: 1
+  icl_num_blocks: 3
+  col_nhead: 4
+  row_nhead: 4
+  icl_nhead: 4
+  n_cls_rows: 32
+data:
+  task: classification
+  micro_batch_size: 4
+  min_seq_len: 64
+  max_seq_len: 256
+  max_features: 20
+  num_workers: 4
+optim:
+  max_steps: 500
+  accum_steps: 4
+  lr: 3.0e-3
+  warmup_frac: 0.1
+out_dir: runs/small
+log_every: 5
+save_every: 50

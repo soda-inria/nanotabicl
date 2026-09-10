@@ -1,11 +1,16 @@
-import typing, math, torch, torch.nn as nn
+"""TabICLv2 architecture, adapted from https://github.com/soda-inria/nanotabicl (BSD-3)."""
+import math
+import typing
+
+import torch
+import torch.nn as nn
 
 
 class NanoTabICLv2(nn.Module):
     def __init__(self, max_classes: int, out_dim: int, embed_dim: int = 128,
                  col_num_blocks: int = 3, row_num_blocks: int = 3, icl_num_blocks: int = 12,
                  col_nhead: int = 8, row_nhead: int = 8, icl_nhead: int = 8,
-                 feature_group_size: int = 3, n_cls_cols: int = 4, n_cls_rows: int = 128):
+                 feature_group_size: int = 3, n_cls_cols: int = 4, n_cls_rows: int = 128, ln_bias: bool = True):
         # classification: max_classes = out_dim (= 10 typically); regression: max_classes = 0, out_dim = n_quantiles
         super().__init__()
         self.feature_group_size = feature_group_size
@@ -28,7 +33,13 @@ class NanoTabICLv2(nn.Module):
         self.out_ln = nn.LayerNorm(icl_dim)
         self.out_mlp = get_mlp(icl_dim, icl_dim * 2, out_dim)
 
+        if not ln_bias:  # the TabICLv2 regression checkpoint uses LayerNorm without bias
+            for module in self.modules():
+                if isinstance(module, nn.LayerNorm):
+                    module.bias = None
+
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        # x.shape = (n_batch, n_rows, n_cols) with train rows first, y.shape = (n_batch, n_train)
         n_batch, n_rows, n_cols = x.shape
         n_batch, n_train = y.shape
 
@@ -57,12 +68,12 @@ class NanoTabICLv2(nn.Module):
             emb = block(emb, kv_max_idx=n_train)  # all rows only attend to training rows
         emb = self.icl_blocks[-1](emb[:, n_train:], emb[:, :n_train])  # need only test predictions
 
-        return self.out_mlp(self.out_ln(emb))  # output MLP
+        return self.out_mlp(self.out_ln(emb))  # (n_batch, n_test, out_dim)
 
 
 class ClassEmbedding(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return super().forward(torch.nn.functional.one_hot(input.squeeze(-1), self.in_features).float())
+        return super().forward(nn.functional.one_hot(input.squeeze(-1).long(), self.in_features).to(self.weight.dtype))
 
 
 def get_mlp(n_in: int, n_hidden: int, n_out: int):
@@ -134,18 +145,18 @@ class Rope(nn.Module):  # rotary positional encoding
         self.register_buffer("sin", torch.empty(0), persistent=False)
         self.register_buffer("cos", torch.empty(0), persistent=False)
 
-    @torch.autocast("cuda", enabled=False)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        batch_size, num_heads, seq_len, head_dim = x.shape
+        with torch.autocast(x.device.type, enabled=False):  # rotations should be computed in full precision
+            batch_size, num_heads, seq_len, head_dim = x.shape
 
-        if self.cos.numel() == 0 or self.cos.device != x.device or self.cos.size(0) < seq_len:  # need to extend cache
-            pos = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)  # (seq_len,)
-            angles = pos[:, None] * self.inv_freq[None, :]  # (seq_len, half_head_dim)
-            self.sin, self.cos = angles.sin(), angles.cos()  # (seq_len, half_head_dim)
+            if self.cos.numel() == 0 or self.cos.device != x.device or self.cos.size(0) < seq_len:  # need to extend cache
+                pos = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)  # (seq_len,)
+                angles = pos[:, None] * self.inv_freq[None, :]  # (seq_len, half_head_dim)
+                self.sin, self.cos = angles.sin(), angles.cos()  # (seq_len, half_head_dim)
 
-        sin, cos = self.sin[:seq_len], self.cos[:seq_len]
-        x1, x2 = x[..., :self.half], x[..., self.half:]  # (batch_size, num_heads, seq_len, half_head_dim)
-        return torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1).to(x.dtype)
+            sin, cos = self.sin[:seq_len], self.cos[:seq_len]
+            x1, x2 = x[..., :self.half].float(), x[..., self.half:].float()  # (batch_size, num_heads, seq_len, half_head_dim)
+            return torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1).to(x.dtype)
 
 
 class QASSMax(nn.Module):  # query-aware scalable softmax for better context length scaling
@@ -166,5 +177,5 @@ if __name__ == '__main__':  # check that forward pass works
     n_batch, n_train, n_test, n_cols = 2, 16, 8, 3
     model = NanoTabICLv2(max_classes=10, out_dim=10)
     x = torch.randn(n_batch, n_train + n_test, n_cols)
-    y = torch.randint(10, size=(n_batch, n_train))
-    print(f'{model(x,y).shape=}')
+    y = torch.randint(10, size=(n_batch, n_train)).float()
+    print(f'{model(x, y).shape=}')
